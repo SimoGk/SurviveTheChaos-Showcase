@@ -7,6 +7,7 @@ local Meteor = require(script.Parent.Meteor)
 local PlayerData = require(script.Parent.PlayerData)
 local Cosmetics = require(script.Parent.Cosmetics)
 local ShopItems = require(ReplicatedStorage.ShopItems)
+local Util = require(script.Parent.Util)
 
 local remotes = ReplicatedStorage.Remotes
 local GOLD = Color3.fromRGB(255, 200, 40)
@@ -68,12 +69,14 @@ function Ghosts.release(player)
 	ghostCtx[player] = nil
 	lastThrow[player] = nil
 	player:SetAttribute("IsGhost", nil)
+	player:SetAttribute("StunnedUntil", nil)
 end
 
 remotes.GhostThrow.OnServerEvent:Connect(function(player, target)
 	local ctx = ghostCtx[player]
 	if not ctx or not ctx.isRunning() or not Ghosts.isGhost(player) then return end
 	if typeof(target) ~= "Vector3" then return end
+	if (player:GetAttribute("StunnedUntil") or 0) > workspace:GetServerTimeNow() then return end
 
 	local now = os.clock()
 	local cooldown = math.max(1, Config.GHOST_COOLDOWN - ShopItems.upgradeValue("ghost", ShopItems.upgradeLevel(player, "ghost")))
@@ -93,10 +96,10 @@ remotes.GhostThrow.OnServerEvent:Connect(function(player, target)
 			if not player.Parent then return end
 			if victim:GetAttribute("IsChampion") then
 				PlayerData.addCoins(player, Config.GHOST_KILL_REWARD * Config.CHAMPION_BOUNTY_MULT * (player:GetAttribute("Pass_GhostKing") and 1.5 or 1))
-				ctx.notify(player.DisplayName .. " took down champion " .. victim.DisplayName .. "!", GOLD)
+				ctx.notify(player.DisplayName .. " took down champion " .. Util.nameOf(victim) .. "!", GOLD)
 			else
 				PlayerData.addCoins(player, Config.GHOST_KILL_REWARD * (player:GetAttribute("Pass_GhostKing") and 1.5 or 1))
-				ctx.notify(player.DisplayName .. " got " .. victim.DisplayName .. "!", Cosmetics.ghostColor(player))
+				ctx.notify(player.DisplayName .. " got " .. Util.nameOf(victim) .. "!", Cosmetics.ghostColor(player))
 			end
 		end,
 	})

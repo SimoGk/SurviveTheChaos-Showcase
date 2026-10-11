@@ -10,6 +10,12 @@ local Ghosts = require(script.Parent.Ghosts)
 local Champion = require(script.Parent.Champion)
 local PlayerData = require(script.Parent.PlayerData)
 local Cosmetics = require(script.Parent.Cosmetics)
+local Damage = require(script.Parent.Damage)
+local Maps = require(script.Parent.Maps)
+local Util = require(script.Parent.Util)
+local Bots = require(script.Parent.Bots)
+local Weapons = require(script.Parent.Weapons)
+local ShopItems = require(ReplicatedStorage.ShopItems)
 
 local remotes = ReplicatedStorage.Remotes
 local GOLD = Color3.fromRGB(255, 200, 40)
@@ -48,6 +54,13 @@ end
 -- 1 disaster, from STACK_FROM_ROUND sometimes 2 (never two floor-destroying ones).
 -- `previous` = disasters of the last round, they are not picked again.
 local function pickDisasters(round, previous)
+	-- Studio test: always play one disaster (set via the ForceDisaster attribute on ServerStorage)
+	local forced = RunService:IsStudio() and ServerStorage:GetAttribute("ForceDisaster")
+	if forced then
+		for _, d in disasters do
+			if d.Name == forced then return {d} end
+		end
+	end
 	local fresh = {}
 	for _, d in disasters do
 		if not table.find(previous, d) then table.insert(fresh, d) end
@@ -118,6 +131,7 @@ function Match:remove(player, respawn)
 	if self.champion == player then self.champion = nil end
 	Ghosts.release(player)
 	Champion.clear(player)
+	Damage.clear(player)
 	player:SetAttribute("MatchSlot", nil)
 	if respawn and player.Parent then player:LoadCharacter() end
 end
@@ -159,7 +173,24 @@ function Match:playRound()
 		callout = function(text, color, duration) self:callout(text, color, duration) end,
 		notify = function(text, color) self:notify(text, color) end,
 		effect = function(kind, ...) self:effect(kind, ...) end,
+		-- ghosts of this round (players and bots), for weapons
+		ghosts = function()
+			local list = {}
+			for p in self.players do
+				if Ghosts.isGhost(p) and p.Character then table.insert(list, p) end
+			end
+			for _, m in arena:GetChildren() do
+				if m:GetAttribute("IsBot") and m:GetAttribute("IsGhost") then table.insert(list, m) end
+			end
+			return list
+		end,
 	}
+
+	-- random themed map (never the same twice in a row)
+	local theme = Maps.pick(self.lastMap)
+	self.lastMap = theme.name
+	Maps.apply(arena, theme, ctx)
+	self:notify("Map: " .. theme.name, Color3.fromRGB(140, 220, 255))
 
 	-- Living players into the arena
 	table.clear(self.alive)
@@ -173,10 +204,34 @@ function Match:playRound()
 			-- face the center so nobody runs straight off the edge
 			char:PivotTo(CFrame.lookAt(pos, Vector3.new(self.center.X, pos.Y, self.center.Z)))
 			self.alive[p] = true
+			p:SetAttribute("Lives", Config.LIVES + ShopItems.upgradeValue("lives", ShopItems.upgradeLevel(p, "lives")))
 			table.insert(conns, hum.Died:Connect(function()
 				self.alive[p] = nil
+				Damage.clear(p)
+				Weapons.take(p)
 				local root = char:FindFirstChild("HumanoidRootPart")
 				if root then self:effect("poof", root.Position) end
+			end))
+			Weapons.give(p, ctx)
+		end
+	end
+	-- bots
+	for _, profile in self.botProfiles do
+		local h = ctx.halfSize - 6
+		local pos = self.center + Vector3.new(math.random(-h, h), 4, math.random(-h, h))
+		local bot = Bots.spawn(profile, ctx, CFrame.lookAt(pos, Vector3.new(self.center.X, pos.Y, self.center.Z)))
+		local hum = bot and bot:FindFirstChildOfClass("Humanoid")
+		if hum then
+			self.alive[bot] = true
+			bot:SetAttribute("Lives", Config.LIVES)
+			table.insert(conns, hum.Died:Connect(function()
+				self.alive[bot] = nil
+				local root = bot:FindFirstChild("HumanoidRootPart")
+				if root then self:effect("poof", root.Position) end
+				task.delay(1.5, function()
+					if bot.Parent then bot:Destroy() end
+					Bots.makeGhost(profile, ctx)
+				end)
 			end))
 		end
 	end
@@ -214,23 +269,43 @@ function Match:playRound()
 	while os.clock() < endTime and (next(self.alive) or (KEEP_ROUND_ALIVE and self:count() > 0)) do
 		self:setStatus(roundName, math.ceil(endTime - os.clock()))
 		for p in self.alive do
-			local root = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
-			if not root then
+			local char = Util.charOf(p)
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if not root or not char.Parent then
 				self.alive[p] = nil
 			elseif root.Position.Y < killY then
-				local hum = p.Character:FindFirstChildOfClass("Humanoid")
-				if hum then hum.Health = 0 end
-				self.alive[p] = nil
+				-- fell through a hole: lose a life and land back on a random tile
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if hum and not Damage.hit(p, hum, "fall") and hum.Health > 0 then
+					local safe = {}
+					for _, t in ctx.tiles:GetChildren() do
+						if t.Anchored and t.CanCollide and not t:GetAttribute("Doomed") then table.insert(safe, t) end
+					end
+					if #safe > 0 then
+						char:PivotTo(CFrame.new(safe[math.random(#safe)].Position + Vector3.new(0, 5, 0)))
+					else
+						hum.Health = 0
+					end
+				end
+				if not hum or hum.Health <= 0 then self.alive[p] = nil end
 			end
 		end
 		task.wait(0.25)
 	end
 	running = false
 	for _, c in conns do c:Disconnect() end
+	for p in self.players do
+		Damage.clear(p)
+		Weapons.take(p)
+	end
 
-	local survivors = {}
+	-- survivors = players and bots; only players get rewards
+	local survivors, players = {}, {}
 	for p in self.alive do
-		if p.Parent and self.players[p] then table.insert(survivors, p) end
+		if p.Parent and (self.players[p] or p:GetAttribute("IsBot")) then
+			table.insert(survivors, p)
+			if self.players[p] then table.insert(players, p) end
+		end
 	end
 	local previousChampion = self.champion
 	Champion.afterRound(self, survivors)
@@ -248,7 +323,7 @@ function Match:playRound()
 	end
 
 	-- Rewards
-	for _, p in survivors do
+	for _, p in players do
 		PlayerData.addCoins(p, Config.SURVIVE_REWARD)
 		if #survivors == 1 then
 			PlayerData.addCoins(p, Config.WIN_BONUS)
@@ -258,15 +333,16 @@ function Match:playRound()
 	if #survivors == 0 then
 		self:setStatus("Nobody survived!", Config.RESULTS_TIME)
 	elseif #survivors == 1 then
-		self:setStatus(survivors[1].DisplayName .. " wins!", Config.RESULTS_TIME)
+		local name = Util.nameOf(survivors[1])
+		self:setStatus(name .. " wins!", Config.RESULTS_TIME)
 		local streak = survivors[1]:GetAttribute("Streak") or 1
-		self:callout(survivors[1].DisplayName .. (streak > 1 and (" WINS x" .. streak .. "!") or " WINS!"), GOLD, Config.RESULTS_TIME)
+		self:callout(name .. (streak > 1 and (" WINS x" .. streak .. "!") or " WINS!"), GOLD, Config.RESULTS_TIME)
 	else
-		self:setStatus(#survivors .. " players survived!", Config.RESULTS_TIME)
+		self:setStatus(#survivors .. " survived!", Config.RESULTS_TIME)
 	end
 	task.wait(Config.RESULTS_TIME)
 
-	for _, p in survivors do
+	for _, p in players do
 		if self.players[p] then self:sendToWaiting(p) end
 	end
 	table.clear(self.alive)
@@ -305,10 +381,19 @@ function Match.start(slot, players)
 		round = 0,
 		champion = nil,
 		ctx = nil,
+		botProfiles = {},
 	}, Match)
 	self.center = self.area:GetAttribute("ArenaCenter")
 	active[slot] = self
 	for _, p in players do self:add(p) end
+	-- small group: fill up with bots
+	if Config.BOTS_ENABLED and #players < Config.BOTS_FILL_TO then
+		self.botProfiles = Bots.makeProfiles(Config.BOTS_FILL_TO - #players)
+		task.delay(1, function()
+			local n = #self.botProfiles
+			self:notify(n .. (n == 1 and " bot joined" or " bots joined") .. " your group!", Color3.fromRGB(140, 220, 255))
+		end)
+	end
 	task.spawn(function()
 		local ok, err = pcall(self.run, self)
 		if not ok then warn("[Match " .. slot .. "] " .. tostring(err)) end

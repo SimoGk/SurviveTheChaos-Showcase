@@ -41,12 +41,16 @@ Every commit in the project history is marked as co-authored with Claude.
 - **7 disasters**: meteor shower, collapsing floor, shrinking arena, spinning laser, lightning that hunts players, rolling boulders, color chaos
 - **Chaos rounds**: from round 3, two disasters can run at the same time (never two floor-destroying ones)
 - **Ghost revenge**: eliminated players become ghosts and earn coins for hitting survivors
+- **Fight back**: survivors unlock a weapon tree (slingshot, bow, crossbow, plasma blaster) and stun ghosts so they can't throw
+- **Lives and shield**: 3 lives per round with a short invulnerability after a hit, plus a shield ability on a cooldown
+- **6 themed maps**: Sky Arena, Downtown, Desert Dunes, Wild Forest, Frozen Peaks and Volcano, picked at random each round
+- **Bots**: small groups are filled with bots that dodge hazards, jump the laser and come back as ghost bots, each with its own reaction time and skill
 - **Champion system**: the last survivor wears a crown and is hunted (2x bounty for ghosts, win streaks)
 - **Group lobby**: 4 portals, up to 8 players per group, up to 4 matches running in parallel on one server
 - **Movement**: sprint with stamina and a dash with wall-collision checks
 - **Mobile ready**: the whole UI scales down automatically on phones, custom touch buttons are placed next to the jump button, landscape lock
-- **Progression**: coins, cosmetics (trails, auras, ghost skins), permanent upgrades, saved per player
-- **Retention**: 7-day daily reward streak, redeemable codes, all-time wins leaderboard
+- **Progression**: coins and gems, cosmetics (trails, auras, ghost skins), permanent upgrades and prestige (reset for a permanent coin bonus and a badge), saved per player
+- **Retention**: welcome gift, playtime gifts, 7-day daily reward streak, redeemable codes, all-time wins leaderboard
 - **Monetization**: game passes and coin packs with safe, idempotent receipt handling
 - **Juice**: custom cartoon UI kit, client-side VFX (explosions, lightning, camera shake), licensed sound and music
 
@@ -76,7 +80,8 @@ flowchart LR
 
 **Key decisions**
 
-- **Server-authoritative**: every purchase, upgrade, code and ghost throw is validated on the server (cooldowns, bounds, prices, rate limits).
+- **Server-authoritative**: every purchase, upgrade, code, ghost throw and weapon shot is validated on the server (cooldowns, bounds, prices, rate limits).
+- **Bots without special cases**: a bot is a character model with an `IsBot` attribute, so hazards, lives and effects treat it like a player, while rewards and saving only ever touch real players.
 - **Isolated matches**: each group runs in its own `Match` object with its own arena, ghosts and champion, so several groups play in parallel without interfering.
 - **Disasters as plug-ins**: each disaster is a module with `Name`, `Run(ctx)` and an optional `Floor` flag. Adding a disaster means adding one file.
 - **Smooth effects**: the server only sends "explosion at X"; clients render VFX and sound locally.
@@ -97,6 +102,7 @@ Selected modules from the game (shared for review, see license below):
 
 - [`Match.luau`](code-samples/Match.luau): match and round lifecycle, disaster selection, rewards
 - [`Ghosts.luau`](code-samples/Ghosts.luau): ghost mode with server-side validation
+- [`Bots.luau`](code-samples/Bots.luau): bot AI (hazard prediction, laser jump timing, ghost bots)
 - [`UIKit.luau`](code-samples/UIKit.luau): cartoon UI kit (3D buttons, windows, icons drawn from frames)
 - [`EffectsClient.client.luau`](code-samples/EffectsClient.client.luau): client VFX, camera shake, music
 

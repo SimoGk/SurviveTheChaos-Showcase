@@ -295,6 +295,29 @@ function DRAW.aura(root, o)
 	end
 end
 
+function DRAW.heart(root, o)
+	local col = {Color3.fromRGB(255, 110, 120), Color3.fromRGB(220, 30, 60)}
+	local tip = shape(root, col, UDim2.new(0.21, 0, 0.24, 0), UDim2.new(0.58, 0, 0.58, 0), UDim.new(0.12, 0), o.stroke)
+	tip.Rotation = 45
+	shape(root, col, UDim2.new(0.06, 0, 0.1, 0), UDim2.new(0.48, 0, 0.48, 0), UDim.new(1, 0), o.stroke)
+	shape(root, col, UDim2.new(0.46, 0, 0.1, 0), UDim2.new(0.48, 0, 0.48, 0), UDim.new(1, 0), o.stroke)
+	local cover = shape(root, col, UDim2.new(0.25, 0, 0.3, 0), UDim2.new(0.5, 0, 0.42, 0), UDim.new(0.2, 0), 0)
+	cover.ZIndex = 2
+end
+
+function DRAW.shield(root, o)
+	local s = shape(root, "Blue", UDim2.new(0.15, 0, 0.05, 0), UDim2.new(0.7, 0, 0.9, 0), UDim.new(0.35, 0), o.stroke)
+	shape(s, {Color3.new(1, 1, 1), Color3.fromRGB(200, 230, 255)}, UDim2.new(0.42, 0, 0.15, 0), UDim2.new(0.16, 0, 0.7, 0), UDim.new(1, 0), 0)
+end
+
+function DRAW.gem(root, o)
+	-- diamond: a rotated square with a light facet
+	local d = shape(root, {Color3.fromRGB(120, 230, 255), Color3.fromRGB(40, 120, 240)}, UDim2.new(0.17, 0, 0.17, 0), UDim2.new(0.66, 0, 0.66, 0), UDim.new(0.18, 0), o.stroke)
+	d.Rotation = 45
+	local facet = shape(d, {Color3.fromRGB(230, 250, 255), Color3.fromRGB(150, 220, 255)}, UDim2.new(0.15, 0, 0.15, 0), UDim2.new(0.35, 0, 0.35, 0), UDim.new(0.2, 0), 0)
+	facet.BackgroundTransparency = 0.15
+end
+
 function DRAW.bolt(root, o)
 	-- two slanted bars = lightning bolt
 	local top = shape(root, "Yellow", UDim2.new(0.32, 0, 0.02, 0), UDim2.new(0.3, 0, 0.55, 0), UDim.new(0.2, 0), o.stroke)
@@ -304,6 +327,71 @@ function DRAW.bolt(root, o)
 	local mid = shape(root, "Yellow", UDim2.new(0.28, 0, 0.4, 0), UDim2.new(0.5, 0, 0.2, 0), UDim.new(0.2, 0), o.stroke)
 	mid.Rotation = -10
 	mid.ZIndex = 2
+end
+
+local WOOD = {Color3.fromRGB(230, 160, 90), Color3.fromRGB(150, 85, 35)}
+
+function DRAW.target(root, o)
+	shape(root, "Red", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), ROUND, o.stroke)
+	shape(root, {Color3.new(1, 1, 1), Color3.fromRGB(225, 225, 225)}, UDim2.new(0.2, 0, 0.2, 0), UDim2.new(0.6, 0, 0.6, 0), ROUND, math.max(1, o.stroke - 1))
+	shape(root, "Red", UDim2.new(0.37, 0, 0.37, 0), UDim2.new(0.26, 0, 0.26, 0), ROUND, math.max(1, o.stroke - 1))
+end
+
+function DRAW.slingshot(root, o)
+	local l = shape(root, WOOD, UDim2.new(0.2, 0, 0.06, 0), UDim2.new(0.16, 0, 0.5, 0), UDim.new(0.5, 0), o.stroke)
+	l.Rotation = -22
+	local r = shape(root, WOOD, UDim2.new(0.64, 0, 0.06, 0), UDim2.new(0.16, 0, 0.5, 0), UDim.new(0.5, 0), o.stroke)
+	r.Rotation = 22
+	local stem = shape(root, WOOD, UDim2.new(0.42, 0, 0.46, 0), UDim2.new(0.16, 0, 0.5, 0), UDim.new(0.5, 0), o.stroke)
+	stem.ZIndex = 2
+	local band = shape(root, "Red", UDim2.new(0.24, 0, 0.14, 0), UDim2.new(0.52, 0, 0.1, 0), UDim.new(0.5, 0), math.max(1, o.stroke - 1))
+	band.ZIndex = 3
+end
+
+function DRAW.bow(root, o)
+	-- right half of a thick ring = the bow, a string and an arrow
+	local clip = Instance.new("Frame")
+	clip.BackgroundTransparency = 1; clip.ClipsDescendants = true
+	clip.Position = UDim2.new(0.42, 0, 0, 0); clip.Size = UDim2.new(0.58, 0, 1, 0)
+	clip.Parent = root
+	local arc = shape(clip, nil, UDim2.new(-0.62, 0, 0.06, 0), UDim2.new(1.5, 0, 0.88, 0), ROUND, o.stroke + 5)
+	arc.UIStroke.Color = UIKit.Outline
+	local arc2 = shape(clip, nil, UDim2.new(-0.62, 0, 0.06, 0), UDim2.new(1.5, 0, 0.88, 0), ROUND, o.stroke + 1)
+	arc2.UIStroke.Color = Color3.fromRGB(150, 230, 100)
+	local str = shape(root, {Color3.new(1, 1, 1), Color3.new(0.9, 0.9, 0.9)}, UDim2.new(0.47, 0, 0.08, 0), UDim2.new(0.04, 0, 0.84, 0), nil, 0)
+	str.BackgroundTransparency = 0
+	local arrow = shape(root, WOOD, UDim2.new(0.04, 0, 0.45, 0), UDim2.new(0.86, 0, 0.1, 0), UDim.new(0.5, 0), math.max(1, o.stroke - 1))
+	arrow.ZIndex = 2
+	local tip = shape(root, {Color3.fromRGB(230, 230, 240), Color3.fromRGB(150, 150, 170)}, UDim2.new(0.8, 0, 0.4, 0), UDim2.new(0.16, 0, 0.2, 0), UDim.new(0.2, 0), math.max(1, o.stroke - 1))
+	tip.Rotation = 45; tip.ZIndex = 3
+end
+
+function DRAW.crossbow(root, o)
+	local stock = shape(root, WOOD, UDim2.new(0.42, 0, 0.2, 0), UDim2.new(0.16, 0, 0.76, 0), UDim.new(0.3, 0), o.stroke)
+	local limb = shape(root, "Blue", UDim2.new(0.06, 0, 0.26, 0), UDim2.new(0.88, 0, 0.16, 0), UDim.new(0.5, 0), o.stroke)
+	limb.ZIndex = 2
+	local bolt = shape(root, {Color3.fromRGB(230, 230, 240), Color3.fromRGB(150, 150, 170)}, UDim2.new(0.44, 0, 0.02, 0), UDim2.new(0.12, 0, 0.3, 0), UDim.new(0.5, 0), math.max(1, o.stroke - 1))
+	bolt.ZIndex = 3
+	stock.ZIndex = 1
+end
+
+function DRAW.blaster(root, o)
+	local barrel = shape(root, {Color3.fromRGB(200, 200, 215), Color3.fromRGB(110, 110, 130)}, UDim2.new(0.5, 0, 0.26, 0), UDim2.new(0.46, 0, 0.2, 0), UDim.new(0.4, 0), o.stroke)
+	local body = shape(root, "Purple", UDim2.new(0.06, 0, 0.18, 0), UDim2.new(0.58, 0, 0.36, 0), UDim.new(0.3, 0), o.stroke)
+	body.ZIndex = 2
+	local grip = shape(root, "Purple", UDim2.new(0.12, 0, 0.44, 0), UDim2.new(0.2, 0, 0.46, 0), UDim.new(0.3, 0), o.stroke)
+	grip.Rotation = -12
+	local glow = shape(root, {Color3.fromRGB(255, 200, 255), Color3.fromRGB(255, 90, 255)}, UDim2.new(0.86, 0, 0.24, 0), UDim2.new(0.14, 0, 0.24, 0), ROUND, math.max(1, o.stroke - 1))
+	glow.ZIndex = 3
+end
+
+function DRAW.star(root, o)
+	for _, rot in {0, 45} do
+		local s = shape(root, "Yellow", UDim2.new(0.17, 0, 0.17, 0), UDim2.new(0.66, 0, 0.66, 0), UDim.new(0.12, 0), o.stroke)
+		s.Rotation = rot
+	end
+	local c = shape(root, {Color3.fromRGB(255, 250, 200), Color3.fromRGB(255, 210, 60)}, UDim2.new(0.3, 0, 0.3, 0), UDim2.new(0.4, 0, 0.4, 0), ROUND, 0)
+	c.ZIndex = 2
 end
 
 function UIKit.icon(parent, kind, opts)
