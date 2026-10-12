@@ -394,9 +394,36 @@ function DRAW.star(root, o)
 	c.ZIndex = 2
 end
 
+-- Painted icons (tools/draw_icons.ps1 in the repo), uploaded to Roblox
+UIKit.IconImages = {
+	coin = "rbxassetid://79196620485623", gem = "rbxassetid://95062803556394", heart = "rbxassetid://82434885536770",
+	shield = "rbxassetid://122164622790186", star = "rbxassetid://137066561024812", bolt = "rbxassetid://76451524906277",
+	trophy = "rbxassetid://128918445646232", crown = "rbxassetid://96677716896060", ghost = "rbxassetid://95799752146824",
+	bag = "rbxassetid://72782200882557", trail = "rbxassetid://110294079541171", aura = "rbxassetid://124322449459303",
+	target = "rbxassetid://136600022717791", slingshot = "rbxassetid://108069828891403", bow = "rbxassetid://117121008234423",
+	crossbow = "rbxassetid://79182176653222", blaster = "rbxassetid://71280909155664", meteor = "rbxassetid://102430115279870",
+	wind = "rbxassetid://123605748171335", snowflake = "rbxassetid://91392140740104", gift = "rbxassetid://117838594951654",
+	potion = "rbxassetid://129568027125679", xp = "rbxassetid://72143148062869", rebirth = "rbxassetid://127885273893453",
+	lock = "rbxassetid://108803545955268", clock = "rbxassetid://76227260696118", rocket = "rbxassetid://115622103239172",
+	potion_speed = "rbxassetid://130356825475336", potion_jump = "rbxassetid://102671447998619", potion_life = "rbxassetid://98215239966066",
+	potion_shield = "rbxassetid://98551089656886", potion_luck = "rbxassetid://72874031935106", potion_xp = "rbxassetid://98163970530932",
+	shield_crystal = "rbxassetid://134302917473140", shield_lava = "rbxassetid://114143171858575", shield_royal = "rbxassetid://88497274030644",
+	boomerang = "rbxassetid://113457150667940", staff = "rbxassetid://136001721553900", superrebirth = "rbxassetid://104769429889031",
+	prestige = "rbxassetid://77604636684657", robot = "rbxassetid://86970002523561", offer = "rbxassetid://112691397255500",
+	candy = "rbxassetid://89932392225989", pumpkin = "rbxassetid://73738166976051",
+	fist = "rbxassetid://123072409346215", bat = "rbxassetid://90908014403546", pan = "rbxassetid://106015264857958",
+	sword = "rbxassetid://129880593447256", hammer = "rbxassetid://87224486713067", blade = "rbxassetid://81852376751588",
+	scythe = "rbxassetid://76221171427729", banhammer = "rbxassetid://98428223683576", hand = "rbxassetid://79012604734478",
+	skull = "rbxassetid://76207245925134", friends = "rbxassetid://120808160326311", globe = "rbxassetid://120428368678643",
+	play = "rbxassetid://103289836520366", flag = "rbxassetid://132822733994627", helmet = "rbxassetid://119714434535031",
+	shirt = "rbxassetid://101096958911866", shoe = "rbxassetid://135355474152126", flame = "rbxassetid://94199231353899",
+}
+
+-- Icon by name. opts: size, position, anchor, color (tints the ghost icon only), stroke (fallback drawing)
 function UIKit.icon(parent, kind, opts)
 	opts = opts or {}
-	local root = Instance.new("Frame")
+	local image = UIKit.IconImages[kind]
+	local root = Instance.new(image and "ImageLabel" or "Frame")
 	root.Name = "Icon"
 	root.BackgroundTransparency = 1
 	root.Size = opts.size or UDim2.new(0, 40, 0, 40)
@@ -404,7 +431,14 @@ function UIKit.icon(parent, kind, opts)
 	if opts.anchor then root.AnchorPoint = opts.anchor end
 	local ratio = Instance.new("UIAspectRatioConstraint")
 	ratio.Parent = root
-	DRAW[kind](root, {stroke = opts.stroke or 2, color = opts.color})
+	if image then
+		root.Image = image
+		root.ScaleType = Enum.ScaleType.Fit
+		if kind == "ghost" and opts.color then root.ImageColor3 = Color3.new(1, 1, 1):Lerp(opts.color, 0.6) end
+	else
+		local draw = DRAW[kind]
+		if draw then draw(root, {stroke = opts.stroke or 2, color = opts.color}) end
+	end
 	root.Parent = parent
 	return root
 end

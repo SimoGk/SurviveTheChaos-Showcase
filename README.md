@@ -4,8 +4,8 @@
 
 # Survive the Chaos
 
-**A multiplayer disaster-survival game for Roblox.** Groups of up to 8 players jump into a portal and survive 5 rounds of meteors, lightning, boulders and collapsing floors.
-The twist: **dying is not the end.** Eliminated players come back as ghosts, float above the arena and throw meteors at the survivors.
+**A multiplayer party-brawler and disaster-survival game for Roblox.** Up to 8 players (plus bots) host or join a lobby and play five modes: survive disasters, smack each other off the arena Fall Guys style, escape the infected or climb the Gun Game ladder.
+The twist: **dying is not the end.** Eliminated players come back as flying ghosts with powers and try to make the survivors lose.
 
 > Status: in development, release planned on Roblox.
 > This repository is a **showcase** (screenshots, architecture, selected code). The full game source is kept private.
@@ -29,6 +29,14 @@ Every commit in the project history is marked as co-authored with Claude.
 | **Lobby** with 4 group portals, leaderboard and daily reward chest | **Round** with live status, timer and stamina |
 | <img src="media/ghost_mode.jpg" width="100%"> | <img src="media/shop_upgrades.jpg" width="100%"> |
 | **Ghost mode**: dead players throw meteors at survivors | **Shop** with cosmetics, upgrades and Robux items |
+| <img src="media/play_menu_host.jpg" width="100%"> | <img src="media/team_knockout.jpg" width="100%"> |
+| **Play menu**: Quick Play, Host (mode, difficulty, privacy, rounds, bots) and Join | **Team Knockout**: red vs blue outlines, no friendly fire |
+| <img src="media/ragdoll.jpg" width="100%"> | <img src="media/ghost_tutorial.jpg" width="100%"> |
+| **Ragdolls**: every hit, shove and explosion throws a floppy body | **Ghost tutorial** and the survivors-left goal line |
+| <img src="media/skill_tree.jpg" width="100%"> | <img src="media/spooky_border.jpg" width="100%"> |
+| **Skill tree**: Survivor, Brawler and Ghost branches | **Spooky border**: grey world, fog, cold wind, the music stops |
+| <img src="media/lucky_wheel.jpg" width="100%"> | <img src="media/robux_bundles.jpg" width="100%"> |
+| **Lucky wheel**: painted wheel, rim lights, odds on every slice | **Robux shop**: Epic, Legendary and Mythic bundles |
 
 ## Thumbnails
 
@@ -38,16 +46,22 @@ Every commit in the project history is marked as co-authored with Claude.
 | <img src="media/thumbnail_last_one_alive.jpg" width="100%"> | <img src="media/thumbnail_get_revenge_as_a_ghost.jpg" width="100%"> |
 ## Features
 
-- **18 challenges**: meteor shower, collapsing floor, shrinking arena, spinning laser, hunting lightning, boulders, color chaos, Block Party, Jump Showdown, Crumble Floor, Hammer Time, Sweeper, Tornado, Ice Age, Bomb Rain, Spike Trap, Floor Is Lava, Wind Storm
+- **5 game modes**: Classic (disasters + ghosts), Infected (touch to infect), Knockout (free for all, no walls at the edge), Team Knockout (red vs blue) and Gun Game (every knock-out upgrades your weapon)
+- **Lobbies**: Quick Play, hosted lobbies with mode, difficulty (Easy / Normal / Hard), rounds and bot count, open / friends-only / locked with a code, a lobby browser, host hand-over; parties stay together after a match
+- **Ragdoll physics** for the new avatar joints and classic rigs: shoves, hits, gusts and explosions throw floppy bodies around
+- **Melee** on its own key with an 8-step tree (fists to Ban Hammer) and **ranged weapons that push survivors** and stun ghosts; knock-outs are credited to the last hitter
+- **9 heroes** with stats and visible gear on top of the player's own avatar, a **skill tree** with three branches, suits, shoes and helmets with rarities from Common to Mythic
+- **Atmosphere**: sky, light and weather per map (snow, ash, dust, fireflies), a day cycle in the lobby and a spooky effect when you leave the play area
+- **19 challenges**: meteor shower, collapsing floor, shrinking arena, spinning laser, hunting lightning, boulders, color chaos, Block Party, Jump Showdown, Crumble Floor, Hammer Time, Sweeper, Tornado, Ice Age, Bomb Rain, Spike Trap, Floor Is Lava, Wind Storm, Pumpkin Bombs (Halloween)
 - **Chaos rounds**: from round 2, two disasters can run at the same time (never two floor-destroying ones)
 - **Fall Guys style brawling**: dash into players to shove them, hold E to grab and drag them
-- **Flying ghosts with powers**: meteor, wind gust, freeze bomb and lightning call
+- **Flying ghosts with powers**: meteor, wind gust, freeze bomb, grave hands and lightning call; the ghost team wins when nobody survives
 - **Ghost revenge**: eliminated players become ghosts and earn coins for hitting survivors
 - **Fight back**: survivors unlock a weapon tree (slingshot, bow, crossbow, plasma blaster) and stun ghosts so they can't throw
 - **Lives and shield**: 3 lives per round with a short invulnerability after a hit, plus a shield ability on a cooldown
 - **6 themed maps**: Sky Arena, Downtown, Desert Dunes, Wild Forest, Frozen Peaks and Volcano, picked at random each round
 - **Bots**: small groups are filled with bots that dodge hazards, jump the laser and come back as ghost bots, each with its own reaction time and skill
-- **Champion system**: the last survivor wears a crown and is hunted (2x bounty for ghosts, win streaks)
+- **Champion system**: the last survivor wears a crown and a bounty that grows with every win streak
 - **Group lobby**: 4 portals, up to 8 players per group, up to 4 matches running in parallel on one server
 - **Movement**: sprint with stamina and a dash with wall-collision checks
 - **Mobile ready**: the whole UI scales down automatically on phones, custom touch buttons are placed next to the jump button, landscape lock
@@ -57,8 +71,8 @@ Every commit in the project history is marked as co-authored with Claude.
 - **Seasonal events**: Halloween with candy currency, a limited shop, a haunted map and a Halloween-only disaster, switched on by date
 - **Social**: daily quests, emote wheel, safe server-checked trading, lobby leaderboards for wins, levels and rebirths
 - **Retention**: welcome gift, playtime gifts, 7-day daily reward streak, redeemable codes, all-time wins leaderboard
-- **Monetization**: game passes and coin packs with safe, idempotent receipt handling
-- **Juice**: custom cartoon UI kit, client-side VFX (explosions, lightning, camera shake), licensed sound and music
+- **Monetization**: game passes, coin / gem packs and Epic / Legendary / Mythic bundles with Robux-only items, safe idempotent receipt handling
+- **Juice**: custom cartoon UI kit, client-side VFX (explosions, lightning, impact stars, camera shake), licensed combat sounds and music, idle moves and weapon inspect
 
 ## Icons
 
@@ -71,8 +85,9 @@ All UI icons are painted by a script (gradients, outlines, gloss) and uploaded t
 ```mermaid
 flowchart LR
     subgraph Server
-        Lobby[LobbyService<br/>portals and countdown] --> Match
-        Match[Match<br/>one per group, 5 rounds] --> Disasters[Disaster modules]
+        Lobby[LobbyService<br/>Quick Play, host, join] --> Match
+        Match[Match<br/>one per lobby, 5 modes] --> Disasters[Disaster modules]
+        Match --> Combat[Melee, Weapons, Ragdoll<br/>knock-out credit]
         Match --> Ghosts[Ghosts<br/>revenge mode]
         Match --> Champion[Champion<br/>crown and streaks]
         Guard[BoundsGuard<br/>anti-escape] --> Match
@@ -112,8 +127,10 @@ The game was playtested in Roblox Studio with real mouse and keyboard input afte
 
 Selected modules from the game (shared for review, see license below):
 
-- [`Match.luau`](code-samples/Match.luau): match and round lifecycle, disaster selection, rewards
+- [`Match.luau`](code-samples/Match.luau): match and round lifecycle for all five modes, teams, infection, Gun Game, knock-out credit, rewards
 - [`Ghosts.luau`](code-samples/Ghosts.luau): ghost mode with server-side validation
+- [`Ragdoll.luau`](code-samples/Ragdoll.luau): server-driven ragdolls for new AnimationConstraint and classic Motor6D rigs
+- [`Melee.luau`](code-samples/Melee.luau): melee weapons built from parts, procedural swing animation, server hit checks
 - [`Bots.luau`](code-samples/Bots.luau): bot AI (hazard prediction, laser jump timing, ghost bots)
 - [`UIKit.luau`](code-samples/UIKit.luau): cartoon UI kit (3D buttons, windows, icons drawn from frames)
 - [`EffectsClient.client.luau`](code-samples/EffectsClient.client.luau): client VFX, camera shake, music

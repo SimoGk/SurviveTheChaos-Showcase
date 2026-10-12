@@ -248,6 +248,7 @@ function Effects.hurt(livesLeft)
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if root then root.AssemblyLinearVelocity += Vector3.new(0, 35, 0) end
 	Sounds.playUI("Pop")
+	Sounds.playUI(math.random() < 0.5 and "Ouch" or "Grunt")
 end
 
 -- our shield blocked a hit
@@ -261,16 +262,71 @@ function Effects.shake(strength, duration)
 	addTrauma(math.clamp((strength or 1) * 0.6, 0, 1))
 end
 
--- weapon projectile flying from a survivor to a ghost (or into the sky on a miss)
+-- weapon projectile flying from a survivor to a ghost (or away on a miss)
+local ShopItems = require(ReplicatedStorage:WaitForChild("ShopItems"))
 local PROJECTILE = {
-	slingshot = {size = Vector3.new(0.7, 0.7, 0.7), shape = Enum.PartType.Ball, material = Enum.Material.Slate, color = Color3.fromRGB(120, 110, 100)},
-	bow = {size = Vector3.new(0.18, 0.18, 3), material = Enum.Material.Wood},
-	crossbow = {size = Vector3.new(0.2, 0.2, 2.4), material = Enum.Material.Metal},
-	blaster = {size = Vector3.new(0.5, 0.5, 3.2), material = Enum.Material.Neon},
+	slingshot = {size = Vector3.new(0.8, 0.8, 0.8), shape = Enum.PartType.Ball, material = Enum.Material.Slate, color = Color3.fromRGB(120, 110, 100), sound = {"Swing", 1.7}},
+	bow = {size = Vector3.new(0.18, 0.18, 3), material = Enum.Material.Wood, sound = {"Swing", 2.1}},
+	crossbow = {size = Vector3.new(0.22, 0.22, 2.4), material = Enum.Material.Metal, sound = {"Click", 0.7}},
+	boomerang = {size = Vector3.new(2.2, 0.3, 2.2), material = Enum.Material.SmoothPlastic, spin = true, sound = {"Whoosh", 1.1}},
+	blaster = {size = Vector3.new(0.6, 0.6, 3.6), material = Enum.Material.Neon, sound = {"Sweep", 1.8}},
+	rocket = {size = Vector3.new(0.9, 0.9, 2.6), material = Enum.Material.Metal, color = Color3.fromRGB(230, 230, 240), smoke = true, sound = {"Whoosh", 0.6}},
 }
-function Effects.shot(from, to, weapon, color, travel, hit)
-	local look = (to - from).Magnitude > 0.1 and CFrame.lookAt(from, to) or CFrame.new(from)
+
+-- hit marker for the shooter: a quick X in the screen center + pop
+local hitGui = Instance.new("ScreenGui")
+hitGui.Name = "HitMarker"; hitGui.ResetOnSpawn = false; hitGui.IgnoreGuiInset = true; hitGui.DisplayOrder = 40
+hitGui.Parent = player:WaitForChild("PlayerGui")
+local function hitMarker()
+	local holder = Instance.new("Frame")
+	holder.AnchorPoint = Vector2.new(0.5, 0.5); holder.Position = UDim2.new(0.5, 0, 0.5, 0); holder.Size = UDim2.fromOffset(46, 46)
+	holder.BackgroundTransparency = 1; holder.Rotation = 45; holder.Parent = hitGui
+	for _, size in {UDim2.fromOffset(46, 7), UDim2.fromOffset(7, 46)} do
+		local bar = Instance.new("Frame")
+		bar.AnchorPoint = Vector2.new(0.5, 0.5); bar.Position = UDim2.new(0.5, 0, 0.5, 0); bar.Size = size
+		bar.BackgroundColor3 = Color3.fromRGB(255, 235, 80); bar.BorderSizePixel = 0
+		local st = Instance.new("UIStroke", bar); st.Thickness = 2; st.Color = Color3.fromRGB(20, 20, 30)
+		bar.Parent = holder
+	end
+	local sc = Instance.new("UIScale", holder); sc.Scale = 1.6
+	tween(sc, 0.15, {Scale = 1})
+	task.delay(0.35, function() holder:Destroy() end)
+	Sounds.playUI("Pop")
+end
+
+local function lightningSegments(from, to, color, width)
+	local segments = 6
+	local last = from
+	for i = 1, segments do
+		local nextPoint = from:Lerp(to, i / segments)
+		if i < segments then nextPoint += Vector3.new(math.random(-2, 2), math.random(-2, 2), math.random(-2, 2)) end
+		local len = (nextPoint - last).Magnitude
+		local seg = fxPart({Size = Vector3.new(width, width, len), CFrame = CFrame.lookAt((last + nextPoint) / 2, nextPoint), Color = color})
+		tween(seg, 0.25, {Transparency = 1})
+		Debris:AddItem(seg, 0.3)
+		last = nextPoint
+	end
+end
+
+function Effects.shot(from, to, weapon, color, travel, hit, shooterId)
+	local item = ShopItems.byId[weapon]
+	local mine = shooterId == player.UserId
+	if weapon == "staff" then
+		-- instant lightning bolt
+		lightningSegments(from, to, Color3.fromRGB(255, 250, 200), 0.5)
+		lightningSegments(from, to, color, 0.25)
+		Sounds.playAt("Thunder", from, {volume = 0.35, speed = 2.2, range = 120, duration = 1})
+		if hit then
+			burst(to, {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.new(1, 1, 1), color),
+				Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+				Lifetime = NumberRange.new(0.2, 0.4), Speed = NumberRange.new(14, 26), SpreadAngle = Vector2.new(180, 180)}, 20, 0.8)
+			if mine then hitMarker() end
+		end
+		if mine then addTrauma(0.2) end
+		return
+	end
 	local style = PROJECTILE[weapon] or PROJECTILE.slingshot
+	local look = (to - from).Magnitude > 0.1 and CFrame.lookAt(from, to) or CFrame.new(from)
 	local p = fxPart({Size = style.size, CFrame = look, Material = style.material, Color = style.color or color})
 	if style.shape then p.Shape = style.shape end
 	local a0 = Instance.new("Attachment"); a0.Position = Vector3.new(0, 0.15, 0); a0.Parent = p
@@ -278,20 +334,256 @@ function Effects.shot(from, to, weapon, color, travel, hit)
 	local trail = Instance.new("Trail"); trail.Attachment0 = a0; trail.Attachment1 = a1
 	trail.Color = ColorSequence.new(color); trail.LightEmission = 1; trail.Lifetime = 0.25
 	trail.Transparency = NumberSequence.new(0.2, 1); trail.FaceCamera = true; trail.Parent = p
-	Sounds.playAt("Whoosh", from, {volume = 0.35, speed = 1.5 + math.random() * 0.3, range = 90, duration = 1.5})
-	tween(p, travel, {CFrame = CFrame.lookAt(to, to + look.LookVector)}, Enum.EasingStyle.Linear)
-	task.delay(travel, function()
-		p:Destroy()
-		if hit then
-			burst(to, {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.fromRGB(255, 240, 120), color),
-				Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
-				Lifetime = NumberRange.new(0.3, 0.6), Speed = NumberRange.new(14, 28), SpreadAngle = Vector2.new(180, 180)}, 22, 1)
-			local ring = fxPart({Shape = Enum.PartType.Ball, Size = Vector3.one * 2, Position = to, Color = Color3.fromRGB(255, 230, 60), Transparency = 0.2})
-			tween(ring, 0.3, {Size = Vector3.one * 8, Transparency = 1})
-			Debris:AddItem(ring, 0.35)
-			Sounds.playAt("Pop", to, {volume = 0.8, speed = 1.3, range = 150, duration = 1.5})
+	if style.smoke then
+		local pe = Instance.new("ParticleEmitter")
+		pe.Texture = "rbxasset://textures/particles/smoke_main.dds"; pe.Color = ColorSequence.new(Color3.fromRGB(220, 220, 220))
+		pe.Size = NumberSequence.new(0.8, 2.4); pe.Transparency = NumberSequence.new(0.3, 1); pe.Lifetime = NumberRange.new(0.5, 0.8)
+		pe.Rate = 60; pe.Speed = NumberRange.new(1); pe.Parent = a0
+		local fire = Instance.new("Fire"); fire.Size = 2; fire.Heat = 0; fire.Parent = p
+	end
+	Sounds.playAt(style.sound[1], from, {volume = 0.45, speed = style.sound[2] + math.random() * 0.15, range = 90, duration = 1.5})
+	if mine then addTrauma(weapon == "rocket" and 0.35 or 0.12) end
+
+	-- fly along an arc (heavier shots drop more), the boomerang spins and comes back
+	local arc = (item and item.arc or 0) * (to - from).Magnitude * 0.25
+	local start = os.clock()
+	local returnStart
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = (os.clock() - start) / math.max(travel, 0.01)
+		if style.spin then
+			if t <= 1 then
+				p.CFrame = CFrame.new(from:Lerp(to, t) + Vector3.new(0, math.sin(t * math.pi) * 3, 0)) * CFrame.Angles(0, os.clock() * 25, 0)
+			else
+				-- come back to the thrower
+				local back = math.clamp(t - 1, 0, 1)
+				local char = player.Character
+				p.CFrame = CFrame.new(to:Lerp(from, back)) * CFrame.Angles(0, os.clock() * 25, 0)
+				if back >= 1 then conn:Disconnect(); p:Destroy() end
+			end
+			return
+		end
+		local tc = math.clamp(t, 0, 1)
+		local pos = from:Lerp(to, tc) + Vector3.new(0, arc * 4 * tc * (1 - tc), 0) -- parabola
+		local nextPos = from:Lerp(to, math.min(1, tc + 0.02)) + Vector3.new(0, arc * 4 * (tc + 0.02) * (1 - tc - 0.02), 0)
+		p.CFrame = (nextPos - pos).Magnitude > 0.01 and CFrame.lookAt(pos, nextPos) or CFrame.new(pos)
+		if t >= 1 then
+			conn:Disconnect()
+			p:Destroy()
+			if hit then
+				burst(to, {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.fromRGB(255, 240, 120), color),
+					Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+					Lifetime = NumberRange.new(0.3, 0.6), Speed = NumberRange.new(14, 28), SpreadAngle = Vector2.new(180, 180)}, 22, 1)
+				local ring = fxPart({Shape = Enum.PartType.Ball, Size = Vector3.one * 2, Position = to, Color = Color3.fromRGB(255, 230, 60), Transparency = 0.2})
+				tween(ring, 0.3, {Size = Vector3.one * 8, Transparency = 1})
+				Debris:AddItem(ring, 0.35)
+				Sounds.playAt("Pop", to, {volume = 0.8, speed = 1.3, range = 150, duration = 1.5})
+				if mine then hitMarker() end
+			end
 		end
 	end)
+	if style.spin and hit and mine then task.delay(travel * 0.5, hitMarker) end
+end
+
+-- big celebration in the middle of the screen (level up, rebirth, prestige)
+local UIKit = require(ReplicatedStorage:WaitForChild("UIKit"))
+local celebrateGui = Instance.new("ScreenGui")
+celebrateGui.Name = "Celebrate"; celebrateGui.ResetOnSpawn = false; celebrateGui.DisplayOrder = 30
+UIKit.autoScale(celebrateGui)
+celebrateGui.Parent = player:WaitForChild("PlayerGui")
+function Effects.celebrate(title, icon, subtitle)
+	local holder = Instance.new("Frame")
+	holder.AnchorPoint = Vector2.new(0.5, 0.5); holder.Position = UDim2.new(0.5, 0, 0.38, 0); holder.Size = UDim2.fromOffset(520, 200)
+	holder.BackgroundTransparency = 1; holder.Parent = celebrateGui
+	local rays = UIKit.icon(holder, "star", {size = UDim2.fromOffset(150, 150), anchor = Vector2.new(0.5, 0.5), position = UDim2.new(0.5, 0, 0, 40)})
+	rays.ImageTransparency = 0.6; rays.ZIndex = 0
+	if rays:IsA("ImageLabel") then
+		rays.Size = UDim2.fromOffset(190, 190)
+		tween(rays, 3, {Rotation = 180})
+	end
+	UIKit.icon(holder, icon or "star", {size = UDim2.fromOffset(110, 110), anchor = Vector2.new(0.5, 0.5), position = UDim2.new(0.5, 0, 0, 40)})
+	local t = UIKit.text(holder, title, {max = 64, stroke = 5, color = Color3.fromRGB(255, 225, 80), size = UDim2.new(1, 0, 0, 70), position = UDim2.new(0, 0, 0, 96)})
+	if subtitle then
+		UIKit.text(holder, subtitle, {max = 30, stroke = 3, color = Color3.fromRGB(170, 255, 140), size = UDim2.new(1, 0, 0, 34), position = UDim2.new(0, 0, 0, 162)})
+	end
+	local sc = Instance.new("UIScale", holder); sc.Scale = 0.2
+	tween(sc, 0.45, {Scale = 1}, Enum.EasingStyle.Back)
+	Sounds.playUI("Win", 3)
+	screenFlash(Color3.fromRGB(255, 230, 120), 0.3, 0.6)
+	task.delay(2.8, function()
+		tween(sc, 0.3, {Scale = 0}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+		task.wait(0.32)
+		holder:Destroy()
+	end)
+	-- sparkles around the character
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if root then
+		burst(root.Position, {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.fromRGB(255, 240, 120), Color3.fromRGB(255, 160, 40)),
+			Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+			Lifetime = NumberRange.new(0.8, 1.4), Speed = NumberRange.new(10, 22), SpreadAngle = Vector2.new(180, 180), Acceleration = Vector3.new(0, -20, 0)}, 60, 2)
+	end
+end
+
+-- we knocked someone out: punchy text in the middle of the screen
+function Effects.koPopup(count)
+	local label = UIKit.text(celebrateGui, count > 1 and ("KNOCKOUT x" .. count .. "!") or "KNOCKOUT!", {max = 54, stroke = 5,
+		color = Color3.fromRGB(255, 120, 80), size = UDim2.new(0, 520, 0, 64), position = UDim2.new(0.5, 0, 0.3, 0)})
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Rotation = -6
+	local sc = Instance.new("UIScale", label); sc.Scale = 2
+	tween(sc, 0.25, {Scale = 1}, Enum.EasingStyle.Back)
+	Sounds.playUI("Stinger")
+	addTrauma(0.3)
+	task.delay(1.1, function()
+		tween(label, 0.3, {TextTransparency = 1})
+		local st = label:FindFirstChildOfClass("UIStroke")
+		if st then tween(st, 0.3, {Transparency = 1}) end
+		task.wait(0.32)
+		label:Destroy()
+	end)
+end
+
+-- we drank something: colored bubbles + gulp
+function Effects.drink(color)
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if root then
+		burst(root.Position + Vector3.new(0, 1, 0), {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.new(1, 1, 1), color),
+			Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+			Lifetime = NumberRange.new(0.6, 1), Speed = NumberRange.new(4, 9), SpreadAngle = Vector2.new(60, 60), EmissionDirection = Enum.NormalId.Top}, 30, 1.5)
+	end
+	screenFlash(color, 0.2, 0.4)
+	Sounds.playUI("Pop")
+end
+
+-- ghost power: wind gust (swirling rings + dust blown outwards)
+function Effects.gust(pos, radius)
+	for i = 1, 3 do
+		local ring = fxPart({Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 3, 3), Material = Enum.Material.ForceField,
+			CFrame = CFrame.new(pos + Vector3.new(0, 1 + i * 1.2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(230, 250, 255), Transparency = 0.1})
+		tween(ring, 0.45 + i * 0.1, {Size = Vector3.new(0.4, radius * 2.4, radius * 2.4), Transparency = 1})
+		Debris:AddItem(ring, 0.8)
+	end
+	burst(pos, {Texture = "rbxasset://textures/particles/smoke_main.dds", Color = ColorSequence.new(Color3.fromRGB(240, 250, 255)),
+		Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 1.5), NumberSequenceKeypoint.new(1, 4)}),
+		Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1)}),
+		Lifetime = NumberRange.new(0.5, 0.9), Speed = NumberRange.new(35, 55), SpreadAngle = Vector2.new(5, 180),
+		EmissionDirection = Enum.NormalId.Top, Drag = 4}, 30, 1.5)
+	Sounds.playAt("Whoosh", pos, {volume = 0.8, speed = 0.7, range = 160, duration = 2})
+	shakeFrom(pos, 0.4, 35)
+end
+
+-- ghost power: freeze bomb (icy burst)
+function Effects.freeze(pos, radius)
+	local ball = fxPart({Shape = Enum.PartType.Ball, Size = Vector3.one * 2, Position = pos, Color = Color3.fromRGB(200, 240, 255), Transparency = 0.1})
+	tween(ball, 0.35, {Size = Vector3.one * radius * 2.2, Transparency = 1})
+	Debris:AddItem(ball, 0.4)
+	burst(pos, {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(120, 220, 255)),
+		Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+		Lifetime = NumberRange.new(0.5, 1), Speed = NumberRange.new(15, 35), SpreadAngle = Vector2.new(90, 90),
+		Acceleration = Vector3.new(0, -30, 0), EmissionDirection = Enum.NormalId.Top}, 40, 1.5)
+	-- frost patch on the ground
+	scorch(pos, radius * 0.9, Color3.fromRGB(190, 235, 255))
+	Sounds.playAt("Pop", pos, {volume = 0.8, speed = 0.6, range = 150, duration = 2})
+	shakeFrom(pos, 0.35, 30)
+end
+
+-- Fall Guys shove: little impact puff (blocked = shield flash)
+function Effects.shove(pos, blocked)
+	local ring = fxPart({Shape = Enum.PartType.Ball, Size = Vector3.one * 1.5, Position = pos,
+		Color = blocked and Color3.fromRGB(90, 190, 255) or Color3.fromRGB(255, 240, 200), Transparency = 0.2})
+	tween(ring, 0.25, {Size = Vector3.one * 7, Transparency = 1})
+	Debris:AddItem(ring, 0.3)
+	burst(pos, {Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.fromRGB(255, 230, 120)),
+		Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+		Lifetime = NumberRange.new(0.2, 0.4), Speed = NumberRange.new(14, 24), SpreadAngle = Vector2.new(180, 180)}, 14, 0.8)
+	Sounds.playAt("Pop", pos, {volume = 0.7, speed = 0.8 + math.random() * 0.2, range = 90, duration = 1.5})
+	if distanceTo(pos) < 6 then addTrauma(0.45) end
+end
+
+-- melee swing: whoosh (heavier weapons sound deeper)
+local SWING_PITCH = {melee_fists = 1.35, melee_bat = 1.1, melee_pan = 1.1, melee_sword = 1.25, melee_hammer = 0.85,
+	melee_blade = 1.4, melee_scythe = 0.9, melee_banhammer = 0.7}
+function Effects.swing(pos, itemId)
+	Sounds.playAt("Swing", pos, {speed = (SWING_PITCH[itemId] or 1.1) + math.random() * 0.1, range = 80, duration = 1.2})
+end
+
+-- something hit a survivor (melee or shot): impact sound + voice + stars. attackerId = who gets the hit marker.
+local IMPACT = {
+	melee_bat = {"Bat", 1.15}, melee_hammer = {"Bat", 0.85}, melee_pan = {"Bonk", 1.7},
+	melee_banhammer = {"Explosion", 0.7}, rocket = {"Bonk", 0.8},
+}
+function Effects.smack(pos, itemId, blocked, attackerId)
+	if blocked then
+		Effects.shove(pos, true)
+		return
+	end
+	local snd = IMPACT[itemId] or {"Bonk", 1.2}
+	Sounds.playAt(snd[1], pos, {speed = snd[2] + math.random() * 0.1, range = 120, duration = 1.5,
+		volume = snd[1] == "Explosion" and 0.5 or nil})
+	Sounds.playAt(math.random() < 0.5 and "Ouch" or "Grunt", pos, {speed = 0.9 + math.random() * 0.3, range = 90, duration = 1.2})
+	-- cartoon impact: white flash ball + yellow stars
+	local ring = fxPart({Shape = Enum.PartType.Ball, Size = Vector3.one * 1.2, Position = pos, Color = Color3.new(1, 1, 1), Transparency = 0.1})
+	tween(ring, 0.18, {Size = Vector3.one * 6, Transparency = 1})
+	Debris:AddItem(ring, 0.25)
+	burst(pos + Vector3.new(0, 1, 0), {Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(255, 250, 180), Color3.fromRGB(255, 190, 40)),
+		Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)}), LightEmission = 1,
+		Lifetime = NumberRange.new(0.3, 0.6), Speed = NumberRange.new(16, 30), SpreadAngle = Vector2.new(180, 180),
+		Acceleration = Vector3.new(0, -25, 0)}, 18, 0.9)
+	if attackerId == player.UserId then
+		hitMarker()
+		addTrauma(0.25)
+	end
+	if distanceTo(pos) < 3 then addTrauma(0.6) end
+end
+
+-- ghost power: grave hands rise out of the floor, grab and sink back
+function Effects.hands(pos, radius)
+	local purple = Color3.fromRGB(150, 80, 230)
+	for i = 1, 6 do
+		local a = (i / 6) * math.pi * 2 + math.random() * 0.4
+		local r = radius * (0.35 + math.random() * 0.5)
+		local base = pos + Vector3.new(math.cos(a) * r, -4.5, math.sin(a) * r)
+		local hand = Instance.new("Model")
+		local arm = fxPart({Size = Vector3.new(1.5, 5, 1.5), CFrame = CFrame.new(base) * CFrame.Angles(0, -a, math.rad(math.random(-15, 15))),
+			Color = purple, Material = Enum.Material.Neon, Transparency = 0.15})
+		arm.Parent = hand
+		hand.PrimaryPart = arm
+		for f = -1, 1 do
+			local finger = fxPart({Size = Vector3.new(0.45, 1.9, 0.45), CFrame = arm.CFrame * CFrame.new(f * 0.5, 3.2, 0) * CFrame.Angles(0, 0, math.rad(f * 18)),
+				Color = purple, Material = Enum.Material.Neon, Transparency = 0.15})
+			finger.Parent = hand
+		end
+		hand.Parent = workspace
+		local start = os.clock()
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			local t = os.clock() - start
+			-- up fast, grab, slowly sink again
+			local up = t < 0.25 and (t / 0.25) or (t < 0.9 and 1 or math.max(0, 1 - (t - 0.9) / 0.5))
+			hand:PivotTo(CFrame.new(base + Vector3.new(0, up * 5.6, 0)) * CFrame.Angles(0, -a, 0))
+			if t > 1.4 then conn:Disconnect(); hand:Destroy() end
+		end)
+	end
+	burst(pos, {Texture = "rbxasset://textures/particles/smoke_main.dds", Color = ColorSequence.new(Color3.fromRGB(120, 60, 180)),
+		Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 2), NumberSequenceKeypoint.new(1, 5)}),
+		Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1)}),
+		Lifetime = NumberRange.new(0.6, 1), Speed = NumberRange.new(4, 10), SpreadAngle = Vector2.new(180, 30)}, 20, 1.5)
+	Sounds.playAt("GhostWind", pos, {volume = 0.6, speed = 1.6, range = 120, duration = 1.6})
+	shakeFrom(pos, 0.35, 30)
+end
+
+-- ban hammer / scythe: shockwave ring on the floor
+function Effects.shockwave(pos, radius, color)
+	local ring = fxPart({Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 2, 2), Material = Enum.Material.Neon,
+		CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90)), Color = color or Color3.new(1, 1, 1), Transparency = 0.2})
+	tween(ring, 0.35, {Size = Vector3.new(0.4, radius * 2.4, radius * 2.4), Transparency = 1})
+	Debris:AddItem(ring, 0.4)
+	shakeFrom(pos, 0.5, 30)
+end
+
+function Effects.grab(pos)
+	Sounds.playAt("Click", pos, {volume = 0.6, speed = 0.8, range = 60, duration = 1})
 end
 
 -- we are a ghost and just got stunned

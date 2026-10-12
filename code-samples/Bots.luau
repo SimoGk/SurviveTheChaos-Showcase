@@ -8,6 +8,7 @@ local Config = require(ReplicatedStorage.Config)
 local Util = require(script.Parent.Util)
 local Ghosts = require(script.Parent.Ghosts)
 local Brawl = require(script.Parent.Brawl)
+local Melee = require(script.Parent.Melee)
 
 local Bots = {}
 
@@ -26,7 +27,8 @@ local ANIMS = {idle = "rbxassetid://507766388", run = "rbxassetid://507767714", 
 local function pick(t) return t[math.random(#t)] end
 
 -- One profile per bot for the whole match: name, look and skill stay the same every round
-function Bots.makeProfiles(count)
+function Bots.makeProfiles(count, difficulty)
+	local dif = difficulty or {botReaction = 1, botAggression = 1, botAim = 1}
 	local names = table.clone(NAMES)
 	local list = {}
 	for _ = 1, count do
@@ -34,10 +36,11 @@ function Bots.makeProfiles(count)
 		table.insert(list, {
 			name = name,
 			skin = pick(SKIN), shirt = pick(SHIRTS), pants = pick(PANTS), ghostColor = pick(GHOST_COLORS),
-			reaction = 0.2 + math.random() * 0.3, -- seconds until a bot notices danger
-			jumpSkill = 0.7 + math.random() * 0.25, -- chance to jump the laser in time
-			aim = 2 + math.random() * 4, -- ghost bot meteor spread in studs
-			aggression = 0.25 + math.random() * 0.45, -- how often it shoves / grabs / chases others
+			reaction = (0.2 + math.random() * 0.3) * dif.botReaction, -- seconds until a bot notices danger
+			jumpSkill = math.clamp((0.7 + math.random() * 0.25) * (2 - dif.botReaction * 0.5) / 1.5, 0.4, 0.98), -- chance to jump the laser in time
+			aim = (2 + math.random() * 4) * dif.botAim, -- ghost bot meteor spread in studs
+			aggression = math.min(0.95, (0.25 + math.random() * 0.45) * dif.botAggression), -- how often it shoves / grabs / chases others
+			melee = pick({"melee_fists", "melee_fists", "melee_bat", "melee_pan", "melee_sword", "melee_hammer"}),
 		})
 	end
 	return list
@@ -95,8 +98,20 @@ end
 
 ---------------------------------------------------------------- danger sense
 
+-- distance to the closest threat (infected players / bots), math.huge without
+local function threatDist(ctx, pos)
+	local best = math.huge
+	if ctx.threats then
+		for _, tp in ctx.threats() do
+			best = math.min(best, Vector3.new(tp.X - pos.X, 0, tp.Z - pos.Z).Magnitude)
+		end
+	end
+	return best
+end
+
 -- Is this point about to be hit? (meteor/lightning warnings, rolling boulders)
 local function inDanger(ctx, pos)
+	if threatDist(ctx, pos) < 14 then return true end
 	for _, h in ctx.hazards:GetDescendants() do
 		if h:IsA("BasePart") then
 			if h:GetAttribute("Danger") then
@@ -156,6 +171,7 @@ local function chooseTile(ctx, from, fleeing)
 		local t = tiles[math.random(#tiles)]
 		if t and tileSafe(ctx, t) then
 			local score = (t.Position - from).Magnitude * (fleeing and 2 or 1) + (t.Position - ctx.center).Magnitude * 0.35 + math.random() * (fleeing and 3 or 10)
+			if ctx.threats then score -= math.min(threatDist(ctx, t.Position), 40) * 2.5 end
 			if not bestScore or score < bestScore then best, bestScore = t, score end
 		end
 	end
@@ -185,6 +201,9 @@ function Bots.spawn(profile, ctx, cframe)
 	local root = rig:FindFirstChild("HumanoidRootPart")
 	pcall(root.SetNetworkOwner, root, nil) -- server moves bots
 	animate(hum)
+	rig:SetAttribute("Melee", profile.melee)
+	Melee.give(rig)
+	require(script.Parent.Ragdoll).onDeath(rig)
 
 	task.spawn(function()
 		local target, nextPick = nil, 0
@@ -193,7 +212,8 @@ function Bots.spawn(profile, ctx, cframe)
 		local lastTheta, lastClock = nil, nil
 		local nextBully = os.clock() + 3
 		local laserSpeed = 1.2
-		while ctx.isRunning() and rig.Parent and hum.Health > 0 do
+		while ctx.isRunning() and rig.Parent and hum.Health > 0 and not rig:GetAttribute("Infected") do
+			if rig:GetAttribute("Ragdolled") then task.wait(0.1) continue end
 			local now = os.clock()
 			local pos = root.Position
 
@@ -237,7 +257,7 @@ function Bots.spawn(profile, ctx, cframe)
 				nextBully = now + 0.5 + math.random() * 0.6
 				local victim, vroot, vdist
 				for _, e in ctx.alivePlayers() do
-					if e ~= rig then
+					if e ~= rig and not Util.sameTeam(rig, e) then
 						local c = Util.charOf(e)
 						local r = c and c:FindFirstChild("HumanoidRootPart")
 						if r then
@@ -247,7 +267,12 @@ function Bots.spawn(profile, ctx, cframe)
 					end
 				end
 				local roll = math.random()
-				if victim and vdist < 4 and roll < profile.aggression then
+				local reach = (Melee.itemOf(rig).range or 5) - 0.5
+				if victim and vdist < reach and roll < profile.aggression * 0.9 then
+					-- smack them with the melee weapon (turn to face them first)
+					root.CFrame = CFrame.lookAt(pos, Vector3.new(vroot.Position.X, pos.Y, vroot.Position.Z))
+					Melee.swing(ctx, rig, {victim})
+				elseif victim and vdist < 4 and roll < profile.aggression then
 					-- lunge into them
 					local dir = Vector3.new(vroot.Position.X - pos.X, 0, vroot.Position.Z - pos.Z)
 					if dir.Magnitude > 0.1 then root.AssemblyLinearVelocity = dir.Unit * 40 + Vector3.new(0, 8, 0) end
@@ -313,6 +338,37 @@ function Bots.spawn(profile, ctx, cframe)
 		end
 	end)
 	return rig
+end
+
+---------------------------------------------------------------- infected bot (Infected mode)
+-- The bot keeps its body, turns green and hunts the closest survivor. Touching = infecting (Match does that).
+function Bots.runInfected(rig, ctx)
+	local hum = rig:FindFirstChildOfClass("Humanoid")
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	if not hum or not root then return end
+	task.spawn(function()
+		while ctx.isRunning() and rig.Parent and hum.Health > 0 do
+			if rig:GetAttribute("Ragdolled") then task.wait(0.1) continue end
+			local frozen = (rig:GetAttribute("FrozenUntil") or 0) > workspace:GetServerTimeNow()
+			hum.WalkSpeed = frozen and 0 or Config.INFECTED_SPEED
+			local best, bestDist
+			for _, e in ctx.alivePlayers() do
+				local c = Util.charOf(e)
+				local r = c and c:FindFirstChild("HumanoidRootPart")
+				if r then
+					local d = (r.Position - root.Position).Magnitude
+					if not bestDist or d < bestDist then best, bestDist = r, d end
+				end
+			end
+			if best and not frozen then
+				-- aim a little ahead of where they run, jump over gaps now and then
+				local lead = best.AssemblyLinearVelocity * math.min(bestDist / 30, 0.6)
+				hum:MoveTo(best.Position + Vector3.new(lead.X, 0, lead.Z))
+				if bestDist < 7 and math.random() < 0.08 and hum.FloorMaterial ~= Enum.Material.Air then hum.Jump = true end
+			end
+			task.wait(0.12)
+		end
+	end)
 end
 
 ---------------------------------------------------------------- ghost bot
@@ -385,9 +441,9 @@ function Bots.makeGhost(profile, ctx)
 					local aim = vroot.Position + Vector3.new(lead.X, 0, lead.Z) + spread
 					local h = ctx.halfSize
 					aim = Vector3.new(math.clamp(aim.X, ctx.center.X - h, ctx.center.X + h), ctx.center.Y, math.clamp(aim.Z, ctx.center.Z - h, ctx.center.Z + h))
-					-- mostly meteors, sometimes a gust or a freeze bomb
+					-- mostly meteors, sometimes a gust, grave hands or a freeze bomb
 					local roll = math.random()
-					local power = roll < 0.65 and "meteor" or (roll < 0.83 and "gust" or "freeze")
+					local power = roll < 0.55 and "meteor" or (roll < 0.7 and "gust" or (roll < 0.85 and "hands" or "freeze"))
 					Ghosts.usePower(power, ctx, aim, nil, profile.ghostColor, profile.name .. " [BOT]")
 				end
 			end
