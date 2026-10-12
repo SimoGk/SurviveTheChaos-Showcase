@@ -5,8 +5,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Config)
-local Meteor = require(script.Parent.Meteor)
 local Util = require(script.Parent.Util)
+local Ghosts = require(script.Parent.Ghosts)
+local Brawl = require(script.Parent.Brawl)
 
 local Bots = {}
 
@@ -36,6 +37,7 @@ function Bots.makeProfiles(count)
 			reaction = 0.2 + math.random() * 0.3, -- seconds until a bot notices danger
 			jumpSkill = 0.7 + math.random() * 0.25, -- chance to jump the laser in time
 			aim = 2 + math.random() * 4, -- ghost bot meteor spread in studs
+			aggression = 0.25 + math.random() * 0.45, -- how often it shoves / grabs / chases others
 		})
 	end
 	return list
@@ -95,9 +97,18 @@ end
 
 -- Is this point about to be hit? (meteor/lightning warnings, rolling boulders)
 local function inDanger(ctx, pos)
-	for _, h in ctx.hazards:GetChildren() do
+	for _, h in ctx.hazards:GetDescendants() do
 		if h:IsA("BasePart") then
-			if h.Name == "MeteorWarning" or h.Name == "BoltWarning" then
+			if h:GetAttribute("Danger") then
+				-- moving obstacle: its box (plus margin), where it is now and where it will be soon
+				local margin = h:GetAttribute("Danger")
+				local vel = h:GetAttribute("Vel") or h.AssemblyLinearVelocity
+				local half = h.Size / 2 + Vector3.new(margin, 0, margin)
+				for _, t in {0, 0.5, 1} do
+					local lp = h.CFrame:PointToObjectSpace(pos - vel * t)
+					if math.abs(lp.X) < half.X and math.abs(lp.Z) < half.Z and math.abs(lp.Y) < half.Y + 4 then return true end
+				end
+			elseif h.Name:sub(-7) == "Warning" then
 				local r = math.max(h.Size.Y, h.Size.Z) / 2 + 3
 				local d = Vector3.new(pos.X - h.Position.X, 0, pos.Z - h.Position.Z)
 				if d.Magnitude < r then return true end
@@ -117,7 +128,7 @@ local function inDanger(ctx, pos)
 end
 
 local function tileSafe(ctx, tile)
-	if not tile.Parent or not tile.Anchored or not tile.CanCollide or tile:GetAttribute("Doomed") then return false end
+	if not tile.Parent or not tile.Anchored or not tile.CanCollide or tile:GetAttribute("Doomed") or tile:GetAttribute("Hot") then return false end
 	if ctx.safeColor and tile:GetAttribute("ColorIdx") ~= ctx.safeColor then return false end
 	-- the spinning laser stays longest near the center: keep away from it
 	if ctx.hazards:FindFirstChild("Laser") then
@@ -180,6 +191,7 @@ function Bots.spawn(profile, ctx, cframe)
 		local noticedAt = nil
 		local jumpRoll = nil
 		local lastTheta, lastClock = nil, nil
+		local nextBully = os.clock() + 3
 		local laserSpeed = 1.2
 		while ctx.isRunning() and rig.Parent and hum.Health > 0 do
 			local now = os.clock()
@@ -209,6 +221,47 @@ function Bots.spawn(profile, ctx, cframe)
 				end
 			end
 
+			local frozen = (rig:GetAttribute("FrozenUntil") or 0) > workspace:GetServerTimeNow()
+			if frozen then
+				hum.WalkSpeed = 0
+				hum.Jump = false
+				target = nil
+			elseif rig:GetAttribute("Grabbed") then
+				hum.WalkSpeed = Config.WALK_SPEED * Config.GRAB_SLOW
+			elseif hum.WalkSpeed < Config.WALK_SPEED then
+				hum.WalkSpeed = Config.WALK_SPEED
+			end
+
+			-- Fall Guys chaos: shove, grab or chase other survivors now and then
+			if not frozen and not hereBad and now > nextBully then
+				nextBully = now + 0.5 + math.random() * 0.6
+				local victim, vroot, vdist
+				for _, e in ctx.alivePlayers() do
+					if e ~= rig then
+						local c = Util.charOf(e)
+						local r = c and c:FindFirstChild("HumanoidRootPart")
+						if r then
+							local d = (r.Position - pos).Magnitude
+							if not vdist or d < vdist then victim, vroot, vdist = e, r, d end
+						end
+					end
+				end
+				local roll = math.random()
+				if victim and vdist < 4 and roll < profile.aggression then
+					-- lunge into them
+					local dir = Vector3.new(vroot.Position.X - pos.X, 0, vroot.Position.Z - pos.Z)
+					if dir.Magnitude > 0.1 then root.AssemblyLinearVelocity = dir.Unit * 40 + Vector3.new(0, 8, 0) end
+					Brawl.shove(ctx, rig, victim)
+				elseif victim and vdist < 5 and roll < profile.aggression * 0.35 then
+					if Brawl.grab(ctx, rig, {victim}) then
+						task.delay(1 + math.random(), function() Brawl.release(rig) end)
+					end
+				elseif victim and vdist < 16 and roll < profile.aggression * 0.3 then
+					-- chase: walk to the victim's tile
+					local vt = tileAt(ctx, vroot.Position)
+					if vt and tileSafe(ctx, vt) then target = vt; nextPick = now + 1.5 end
+				end
+			end
 			if target then
 				local goal = target.Position + Vector3.new(0, target.Size.Y / 2, 0)
 				if Vector3.new(goal.X - pos.X, 0, goal.Z - pos.Z).Magnitude > 2 then
@@ -230,14 +283,33 @@ function Bots.spawn(profile, ctx, cframe)
 				local rel = pos - ctx.center
 				local r = math.max(Vector3.new(rel.X, 0, rel.Z).Magnitude, 1)
 				local untilHit = ((phi - theta) % math.pi) / laserSpeed - math.min(2.2 / r, 1) / laserSpeed
-				if untilHit < 0.1 then
+				-- Jump Showdown: a high bar that hits jumpers - don't jump right before it passes
+				local high = ctx.hazards:FindFirstChild("HighBar")
+				local highNear = false
+				if high then
+					local hd = high.CFrame.RightVector
+					local htheta = math.atan2(-hd.Z, hd.X)
+					local hUntil = ((htheta - phi) % math.pi) / (laserSpeed * 0.6) -- it turns the other way, slower
+					highNear = hUntil < 0.45 or hUntil > math.pi / (laserSpeed * 0.6) - 0.1
+				end
+				if untilHit < 0.1 and not highNear then
 					if jumpRoll == nil then jumpRoll = math.random() < profile.jumpSkill end
 					if jumpRoll and hum.FloorMaterial ~= Enum.Material.Air then hum.Jump = true end
 				elseif untilHit > 0.5 then
 					jumpRoll = nil
 				end
 			end
-			task.wait(theta and 0.03 or 0.1)
+			for _, h in ctx.hazards:GetDescendants() do
+				if h:IsA("BasePart") and h:GetAttribute("Jump") and hum.FloorMaterial ~= Enum.Material.Air then
+					local vel = h:GetAttribute("Vel") or Vector3.zero
+					local lp = h.CFrame:PointToObjectSpace(pos - vel * 0.3)
+					local half = h.Size / 2 + Vector3.new(1.5, 0, 1.5)
+					if math.abs(lp.X) < half.X and math.abs(lp.Z) < half.Z and math.random() < profile.jumpSkill + 0.05 then
+						hum.Jump = true
+					end
+				end
+			end
+			task.wait(theta and 0.03 or 0.08)
 		end
 	end)
 	return rig
@@ -259,8 +331,6 @@ end
 -- A dead bot floats above the arena and throws meteors at survivors (players and bots)
 function Bots.makeGhost(profile, ctx)
 	if not ctx.isRunning() then return end
-	local floor = ctx.arena:FindFirstChild("GhostFloor")
-	if not floor then return end
 	local rig, hum = buildRig(profile)
 	if not rig then return end
 	rig:SetAttribute("IsGhost", true)
@@ -274,7 +344,7 @@ function Bots.makeGhost(profile, ctx)
 	hl.DepthMode = Enum.HighlightDepthMode.Occluded
 	hl.Parent = rig
 
-	local base = floor.Floor.Position + Vector3.new(0, 4, 0)
+	local base = ctx.center + Vector3.new(0, 30, 0)
 	local r = ctx.halfSize - 8
 	local function randomSpot()
 		return base + Vector3.new(math.random(-r, r), 0, math.random(-r, r))
@@ -315,15 +385,10 @@ function Bots.makeGhost(profile, ctx)
 					local aim = vroot.Position + Vector3.new(lead.X, 0, lead.Z) + spread
 					local h = ctx.halfSize
 					aim = Vector3.new(math.clamp(aim.X, ctx.center.X - h, ctx.center.X + h), ctx.center.Y, math.clamp(aim.Z, ctx.center.Z - h, ctx.center.Z + h))
-					Meteor.spawn(ctx, aim, {
-						radius = Config.GHOST_BLAST_RADIUS,
-						warnTime = Config.GHOST_WARN_TIME,
-						height = 35, speed = 70,
-						color = profile.ghostColor,
-						onKill = function(v)
-							ctx.notify(profile.name .. " [BOT] got " .. Util.nameOf(v) .. "!", profile.ghostColor)
-						end,
-					})
+					-- mostly meteors, sometimes a gust or a freeze bomb
+					local roll = math.random()
+					local power = roll < 0.65 and "meteor" or (roll < 0.83 and "gust" or "freeze")
+					Ghosts.usePower(power, ctx, aim, nil, profile.ghostColor, profile.name .. " [BOT]")
 				end
 			end
 		end

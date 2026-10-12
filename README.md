@@ -38,8 +38,10 @@ Every commit in the project history is marked as co-authored with Claude.
 | <img src="media/thumbnail_last_one_alive.jpg" width="100%"> | <img src="media/thumbnail_get_revenge_as_a_ghost.jpg" width="100%"> |
 ## Features
 
-- **7 disasters**: meteor shower, collapsing floor, shrinking arena, spinning laser, lightning that hunts players, rolling boulders, color chaos
-- **Chaos rounds**: from round 3, two disasters can run at the same time (never two floor-destroying ones)
+- **18 challenges**: meteor shower, collapsing floor, shrinking arena, spinning laser, hunting lightning, boulders, color chaos, Block Party, Jump Showdown, Crumble Floor, Hammer Time, Sweeper, Tornado, Ice Age, Bomb Rain, Spike Trap, Floor Is Lava, Wind Storm
+- **Chaos rounds**: from round 2, two disasters can run at the same time (never two floor-destroying ones)
+- **Fall Guys style brawling**: dash into players to shove them, hold E to grab and drag them
+- **Flying ghosts with powers**: meteor, wind gust, freeze bomb and lightning call
 - **Ghost revenge**: eliminated players become ghosts and earn coins for hitting survivors
 - **Fight back**: survivors unlock a weapon tree (slingshot, bow, crossbow, plasma blaster) and stun ghosts so they can't throw
 - **Lives and shield**: 3 lives per round with a short invulnerability after a hit, plus a shield ability on a cooldown
@@ -49,10 +51,18 @@ Every commit in the project history is marked as co-authored with Claude.
 - **Group lobby**: 4 portals, up to 8 players per group, up to 4 matches running in parallel on one server
 - **Movement**: sprint with stamina and a dash with wall-collision checks
 - **Mobile ready**: the whole UI scales down automatically on phones, custom touch buttons are placed next to the jump button, landscape lock
-- **Progression**: coins and gems, cosmetics (trails, auras, ghost skins), permanent upgrades and prestige (reset for a permanent coin bonus and a badge), saved per player
+- **Progression**: XP and levels, Rebirth, Super Rebirth and Prestige, a 30-tier season pass, crates with shown odds, a daily lucky wheel
+- **Collection**: 7-weapon tree, 4 shields, 6 drinks, trails, layered particle auras, 10 hats, ghost skins, crate-exclusive and season-exclusive items
+- **Live ops**: server events (Double Coins, Double XP, Gem Rain, Chaos Overload) started randomly, by players (Chaos Hour) or by the owner
 - **Retention**: welcome gift, playtime gifts, 7-day daily reward streak, redeemable codes, all-time wins leaderboard
 - **Monetization**: game passes and coin packs with safe, idempotent receipt handling
 - **Juice**: custom cartoon UI kit, client-side VFX (explosions, lightning, camera shake), licensed sound and music
+
+## Icons
+
+All UI icons are painted by a script (gradients, outlines, gloss) and uploaded to Roblox:
+
+<img src="media/icons.png" width="100%">
 
 ## Architecture
 
