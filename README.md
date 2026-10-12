@@ -54,6 +54,8 @@ Every commit in the project history is marked as co-authored with Claude.
 - **Progression**: XP and levels, Rebirth, Super Rebirth and Prestige, a 30-tier season pass, crates with shown odds, a daily lucky wheel
 - **Collection**: 7-weapon tree, 4 shields, 6 drinks, trails, layered particle auras, 10 hats, ghost skins, crate-exclusive and season-exclusive items
 - **Live ops**: server events (Double Coins, Double XP, Gem Rain, Chaos Overload) started randomly, by players (Chaos Hour) or by the owner
+- **Seasonal events**: Halloween with candy currency, a limited shop, a haunted map and a Halloween-only disaster, switched on by date
+- **Social**: daily quests, emote wheel, safe server-checked trading, lobby leaderboards for wins, levels and rebirths
 - **Retention**: welcome gift, playtime gifts, 7-day daily reward streak, redeemable codes, all-time wins leaderboard
 - **Monetization**: game passes and coin packs with safe, idempotent receipt handling
 - **Juice**: custom cartoon UI kit, client-side VFX (explosions, lightning, camera shake), licensed sound and music
